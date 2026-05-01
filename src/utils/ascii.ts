@@ -41,36 +41,35 @@ export function generatePodium(
   if (entries.length === 0) return '';
 
   const [first, second, third] = entries;
+  const BLOCK = '████████';
+  const BLANK = '        ';
 
-  // Build column strings (name on top of podium block)
-  const col = (label: string, height: number, medal: string) => {
-    const nameRow   = label.slice(0, 8).padEnd(8);
-    const medalRow  = medal.padEnd(8);
-    const block     = '████████';
-    return { nameRow, medalRow, block, height };
-  };
-
-  const c1 = col(second?.name ?? '',  2, second?.medal ?? '');
-  const c2 = col(first.name,          3, first.medal);
-  const c3 = col(third?.name  ?? '',  1, third?.medal  ?? '');
+  // Columns: left=2nd(h=2), center=1st(h=3), right=3rd(h=1)
+  const cols = [
+    { entry: second, height: 2 },
+    { entry: first,  height: 3 },
+    { entry: third,  height: 1 },
+  ].map(({ entry, height }) => {
+    const name  = (entry?.name  ?? '').slice(0, 8).padEnd(8);
+    const medal = (entry?.medal ?? '').padEnd(8);
+    // Column lines from top: name, medal, then blocks
+    return [name, medal, ...Array(height).fill(BLOCK)];
+  });
 
   const maxH = 3;
+  // Each column is padded at the top so all bases align at the same row
+  const padded = cols.map((col, i) => {
+    const pad = maxH - [2, 3, 1][i]; // spaces to prepend
+    return [...Array(pad).fill(BLANK), ...col];
+  });
+
+  const totalRows = maxH + 2; // name + medal + blocks
   const lines: string[] = [];
-
-  // Name row
-  lines.push(`${c1.nameRow}  ${c2.nameRow}  ${c3.nameRow}`);
-  // Medal row
-  lines.push(`${c1.medalRow}  ${c2.medalRow}  ${c3.medalRow}`);
-
-  // Podium blocks (tallest = 3 rows)
-  for (let row = maxH; row >= 1; row--) {
-    const p1 = row <= c1.height ? c1.block : ' '.repeat(8);
-    const p2 = row <= c2.height ? c2.block : ' '.repeat(8);
-    const p3 = row <= c3.height ? c3.block : ' '.repeat(8);
-    lines.push(`${p1}  ${p2}  ${p3}`);
+  for (let r = 0; r < totalRows; r++) {
+    lines.push(`${padded[0][r]}  ${padded[1][r]}  ${padded[2][r]}`);
   }
 
-  // Values below podium
+  // Values at the base
   const v1 = (second?.value ?? '').slice(0, 8).padEnd(8);
   const v2 = first.value.slice(0, 8).padEnd(8);
   const v3 = (third?.value  ?? '').slice(0, 8).padEnd(8);

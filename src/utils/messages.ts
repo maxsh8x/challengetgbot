@@ -4,7 +4,7 @@ import { TITLES } from '../constants';
 import { Theme, getTheme, getDisplayEmoji } from '../themes';
 import { Achievement } from '../achievements';
 import { getDiff, getAbsDiff, getSizeEmoji, getRoast, formatDate, formatTimeLeft } from './game';
-import { formatDays } from '../handlers/commands';
+import { formatDays } from './game';
 import { generateDick, generateJackpotBanner, generateSizeBar, generateMeter, generatePodium } from './ascii';
 
 export function escapeHtml(t: string): string {
@@ -96,28 +96,27 @@ export function formatGameResults(session: GameSession): string {
     ].join('\n');
   }
 
+  // Sort ASC by absDiff: closest to target first (= loser at top), furthest last (= winner at bottom)
   const sorted = [...participants].sort((a, b) => getAbsDiff(a.size, target) - getAbsDiff(b.size, target));
-  const winner = sorted[0];
-  const loser  = sorted[sorted.length - 1];
-  const medals = ['🥇', '🥈', '🥉'];
+  const loser  = sorted[0];
 
-  const rows = sorted.map((p, i) => {
+  const rows = sorted.slice(0, 3).map((p, i) => {
     const diff    = getDiff(p.size, target);
     const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
-    const crown   = i === 0 ? ' 👑' : '';
-    return `${medals[i] ?? `${i + 1}.`} ${mention(p.userId, p.firstName)} — ${escapeHtml(p.funnyName)} <b>${p.size}${theme.unit}</b> (${diffStr}${theme.unit})${crown}`;
+    const badge   = i === 0 ? ' 💀' : '';
+    return `${i + 1}. ${mention(p.userId, p.firstName)} — ${escapeHtml(p.funnyName)} <b>${p.size}${theme.unit}</b> (${diffStr}${theme.unit})${badge}`;
   });
 
-  const isJackpot = getAbsDiff(winner.size, target) === 0;
+  // Jackpot = loser landed exactly on target
+  const isJackpot = getAbsDiff(loser.size, target) === 0;
 
-  // ASCII podium (top 3)
+  // Podium of losers: top 3 closest to target (ASC sort = sorted[0..2])
+  const loserMedals = ['💀', '🥈', '🥉'];
   const podiumEntries = sorted.slice(0, 3).map((p, i) => ({
     name:  p.firstName.slice(0, 7),
     value: `${p.size}${theme.unit}`,
-    medal: medals[i] ?? '',
+    medal: loserMedals[i] ?? '',
   }));
-  // Reorder for podium: 2nd | 1st | 3rd
-  const podiumOrdered = [podiumEntries[1], podiumEntries[0], podiumEntries[2]].filter(Boolean) as typeof podiumEntries;
 
   const lines = [
     `🏁 <b>ГОЛОСОВАНИЕ ЗАВЕРШЕНО: ${theme.name} ${theme.emoji}</b>`,
@@ -130,19 +129,17 @@ export function formatGameResults(session: GameSession): string {
   ];
 
   if (sorted.length >= 2) {
-    lines.push(`<pre>${generatePodium(podiumOrdered)}</pre>`, '');
+    lines.push(`<pre>${generatePodium(podiumEntries)}</pre>`, '');
   }
 
   lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  if (isJackpot) {
-    lines.push(`${theme.emoji}🎊 <b>ДЖЕКПОТ! ${mention(winner.userId, winner.firstName)} попал ТОЧНО В ЦЕЛЬ!</b>`);
-  } else {
-    lines.push(`🏆 <b>Победитель:</b> ${mention(winner.userId, winner.firstName)} — ${winner.size}${theme.unit}`);
-  }
-
   if (participants.length >= 2) {
-    lines.push(`💀 <b>Лузер:</b> ${mention(loser.userId, loser.firstName)} — готовь видос, братан! 🎬`);
+    if (isJackpot) {
+      lines.push(`🏆🎯 <b>ДЖЕКПОТ! ${mention(loser.userId, loser.firstName)} попал ТОЧНО В ЦЕЛЬ!</b> Готовь видос! 🎬`);
+    } else {
+      lines.push(`🏆 <b>Топ лузер:</b> ${mention(loser.userId, loser.firstName)} — готовь видос, братан! 🎬`);
+    }
   }
 
   return lines.join('\n');
@@ -311,7 +308,7 @@ export function formatScheduleInfo(schedule: import('../storage').ChatSchedule |
     return [
       '📅 <b>Авторасписание</b>', '',
       'Не настроено.', '',
-      '/schedule 15:00 — каждый день в 15:00 UTC',
+      '/schedule 15:00 — каждый день в 15:00 МСК',
       '/schedule 15:00 пн пт — только по понедельникам и пятницам',
       '/schedule 15:00 будни — рабочие дни',
     ].join('\n');
@@ -321,7 +318,7 @@ export function formatScheduleInfo(schedule: import('../storage').ChatSchedule |
   return [
     '📅 <b>Авторасписание</b>',
     '',
-    `⏰ Время: <b>${schedule.time} UTC</b>`,
+    `⏰ Время: <b>${schedule.time} МСК</b>`,
     `📆 Дни: <b>${daysStr}</b>`,
     `${theme.emoji} Тема: <b>${theme.name}</b>`,
     `⏱ Длительность: <b>${schedule.duration} мин</b>`,

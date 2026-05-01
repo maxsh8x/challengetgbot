@@ -235,17 +235,22 @@ class Storage {
   // ── Misc ─────────────────────────────────────────────────────────────────────
 
   getUserStats(userId: number): { totalPlays: number; wins: number; bestDiff: number | null } {
-    let totalPlays = 0, wins = 0;
-    let bestDiff: number | null = null;
+    let totalPlays = 0;
     for (const plays of Object.values(this.data.plays)) {
-      const up = plays.find((p) => p.userId === userId);
-      if (!up) continue;
-      totalPlays++;
-      const sorted = [...plays].sort((a, b) => Math.abs(a.size - 13) - Math.abs(b.size - 13));
-      if (sorted[0].userId === userId) wins++;
-      const diff = Math.abs(up.size - 13);
-      if (bestDiff === null || diff < bestDiff) bestDiff = diff;
+      if (plays.some((p) => p.userId === userId)) totalPlays++;
     }
+
+    let wins = 0;
+    let bestDiff: number | null = null;
+    for (const r of this.data.gameResults) {
+      if (r.winner?.userId === userId) {
+        wins++;
+        if (bestDiff === null || r.winner.diff < bestDiff) bestDiff = r.winner.diff;
+      } else if (r.loser?.userId === userId) {
+        if (bestDiff === null || r.loser.diff < bestDiff) bestDiff = r.loser.diff;
+      }
+    }
+
     return { totalPlays, wins, bestDiff };
   }
 }

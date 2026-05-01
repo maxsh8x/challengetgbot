@@ -88,3 +88,31 @@ export function formatTimeLeft(ms: number): string {
   if (minutes === 0) return `${seconds}с`;
   return `${minutes}м ${seconds.toString().padStart(2, '0')}с`;
 }
+
+// ── Day-of-week helpers (used by scheduler commands & messages) ───────────────
+
+const DAY_NAMES: Record<string, number> = {
+  вс: 0, пн: 1, вт: 2, ср: 3, чт: 4, пт: 5, сб: 6,
+  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+};
+
+const DAY_LABELS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+export function parseDays(args: string[]): number[] {
+  const days = new Set<number>();
+  for (const arg of args) {
+    const lower = arg.toLowerCase();
+    if (lower === 'будни'    || lower === 'weekdays') { [1,2,3,4,5].forEach((d) => days.add(d)); continue; }
+    if (lower === 'выходные' || lower === 'weekend')  { [0,6].forEach((d) => days.add(d)); continue; }
+    if (lower in DAY_NAMES) { days.add(DAY_NAMES[lower]); continue; }
+    for (const part of lower.split(',')) {
+      if (part in DAY_NAMES) days.add(DAY_NAMES[part]);
+    }
+  }
+  return [...days].sort((a, b) => a - b);
+}
+
+export function formatDays(days: number[]): string {
+  if (days.length === 0) return 'каждый день';
+  return days.map((d) => DAY_LABELS[d]).join(' ');
+}

@@ -25,6 +25,8 @@ import {
   getToday,
   generateId,
   getAbsDiff,
+  parseDays,
+  formatDays,
 } from '../utils/game';
 import { THEME_LIST, getTheme } from '../themes';
 import { DEFAULT_DURATION_MINUTES, MIN_DURATION_MINUTES, MAX_DURATION_MINUTES } from '../constants';
@@ -36,7 +38,8 @@ export async function handleStart(ctx: Context): Promise<void> {
     `👋 <b>Привет, ${escapeHtml(name)}!</b>`,
     '',
     'Я определяю, кто готовит видео на пятницу — методом случайного замера.',
-    'Победитель ближе всего к цели. Лузер снимает видос. 🎬',
+    'Кто окажется <b>ближе всего к цели</b> — тот <b>лузер</b> и снимает видос. 🎬',
+    'Остальные в безопасности.',
     '',
     'Добавь меня в групповой чат и запусти /new.',
     '',
@@ -51,7 +54,8 @@ const COMMAND_HELP: Record<string, string> = {
     '🎲 <b>/new</b> — запустить голосование',
     '',
     'Бот предложит выбрать тему, затем все участники жмут «Участвовать!».',
-    'По истечении времени объявляется победитель (ближайший к цели) и лузер.',
+    'По истечении времени: кто ближе всего к цели — лузер, готовит видос 🎬',
+    'Кто дальше всех — в безопасности.',
     '',
     '<b>Опции:</b>',
     '/new 60 — длительность 60 минут (по умолчанию 30)',
@@ -140,7 +144,7 @@ const COMMAND_HELP: Record<string, string> = {
     '/schedule',
     '',
     '<b>Установить:</b>',
-    '/schedule 15:00 — каждый день в 15:00 UTC',
+    '/schedule 15:00 — каждый день в 15:00 МСК',
     '/schedule 15:00 пн пт — по понедельникам и пятницам',
     '/schedule 15:00 будни — пн–пт',
     '/schedule 15:00 выходные — сб и вс',
@@ -150,7 +154,7 @@ const COMMAND_HELP: Record<string, string> = {
     '/schedule 15:00 пт 45 — длительность 45 мин',
     '/schedule 15:00 пт anon — анонимный режим',
     '',
-    'Время всегда UTC. Список тем: classic, pizza, iq, beer, salary, bench, temp.',
+    'Время всегда МСК. Список тем: classic, pizza, iq, beer, salary, bench, temp.',
     '/unschedule — отключить расписание.',
   ].join('\n'),
 };
@@ -166,6 +170,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
 
   const overview = [
     '📖 <b>Команды</b>',
+    '<i>Ближайший к цели — лузер, готовит видос. Дальний — в безопасности.</i>',
     '',
     '<b>Игра</b>',
     '/new — запустить голосование',
@@ -436,7 +441,7 @@ export async function handleSchedule(ctx: Context): Promise<void> {
 
   const timeArg = args[0];
   if (!/^\d{1,2}:\d{2}$/.test(timeArg)) {
-    await ctx.reply('❌ Формат времени: HH:MM (UTC). Пример: /schedule 15:00', { parse_mode: 'HTML' });
+    await ctx.reply('❌ Формат времени: HH:MM МСК. Пример: /schedule 15:00', { parse_mode: 'HTML' });
     return;
   }
 
@@ -465,7 +470,7 @@ export async function handleSchedule(ctx: Context): Promise<void> {
   await ctx.reply(
     [
       '📅 <b>Расписание установлено!</b>',
-      `⏰ Время: <b>${timeArg} UTC</b>`,
+      `⏰ Время: <b>${timeArg} МСК</b>`,
       `📆 Дни: <b>${daysStr}</b>`,
       `${theme.emoji} Тема: <b>${theme.name}</b>`,
       `⏱ Длительность: <b>${duration} мин</b>`,
@@ -495,8 +500,9 @@ export async function announceResults(telegram: Telegram, session: GameSession):
   const theme = getTheme(session.themeId);
   const { participants, target } = session;
 
+  // Furthest from target = winner (safe); closest = loser (makes video)
   const sorted = [...participants].sort(
-    (a, b) => getAbsDiff(a.size, target) - getAbsDiff(b.size, target),
+    (a, b) => getAbsDiff(b.size, target) - getAbsDiff(a.size, target),
   );
   const winner = sorted[0] ?? null;
   const loser  = sorted.length >= 2 ? sorted[sorted.length - 1] : null;
@@ -643,7 +649,8 @@ export async function resolveDuel(telegram: Telegram, duel: Duel): Promise<void>
   const p1 = makeParticipant(duel.challengerId,  duel.challengerName);
   const p2 = makeParticipant(duel.challengedId,  duel.challengedName);
 
-  const winner = getAbsDiff(p1.size, target) <= getAbsDiff(p2.size, target) ? p1 : p2;
+  // Furthest from target = winner (safe); closest = loser (makes video)
+  const winner = getAbsDiff(p1.size, target) >= getAbsDiff(p2.size, target) ? p1 : p2;
   const loser  = winner === p1 ? p2 : p1;
 
   // Grant duel achievement to winner
@@ -655,35 +662,3 @@ export async function resolveDuel(telegram: Telegram, duel: Duel): Promise<void>
   await telegram.sendMessage(duel.chatId, text, { parse_mode: 'HTML' });
 }
 
-// ── Day-of-week helpers ──────────────────────────────────────────────────────
-
-const DAY_NAMES: Record<string, number> = {
-  // Russian
-  вс: 0, пн: 1, вт: 2, ср: 3, чт: 4, пт: 5, сб: 6,
-  // English
-  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
-};
-
-const DAY_LABELS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-
-function parseDays(args: string[]): number[] {
-  const days = new Set<number>();
-
-  for (const arg of args) {
-    const lower = arg.toLowerCase();
-    if (lower === 'будни'   || lower === 'weekdays') { [1,2,3,4,5].forEach((d) => days.add(d)); continue; }
-    if (lower === 'выходные' || lower === 'weekend')  { [0,6].forEach((d) => days.add(d)); continue; }
-    if (lower in DAY_NAMES) { days.add(DAY_NAMES[lower]); continue; }
-    // comma-separated: пн,вт,пт
-    for (const part of lower.split(',')) {
-      if (part in DAY_NAMES) days.add(DAY_NAMES[part]);
-    }
-  }
-
-  return [...days].sort((a, b) => a - b);
-}
-
-export function formatDays(days: number[]): string {
-  if (days.length === 0) return 'каждый день';
-  return days.map((d) => DAY_LABELS[d]).join(' ');
-}

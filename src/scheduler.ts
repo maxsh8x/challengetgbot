@@ -61,24 +61,29 @@ class Scheduler {
   }
 }
 
-// Returns ms until the next occurrence of `time` (HH:MM UTC) on one of `days`.
+const MSK_OFFSET_HOURS = 3; // MSK = UTC+3, no DST
+
+// Returns ms until the next occurrence of `time` (HH:MM MSK) on one of `days`.
 // If `days` is empty → any day of week.
 function msUntilNext(time: string, days: number[]): number {
   const [hh, mm] = time.split(':').map(Number);
+  // Convert MSK to UTC by subtracting offset (setUTCHours handles negative values correctly)
+  const utcHH = hh - MSK_OFFSET_HOURS;
   const now = new Date();
 
   for (let offset = 0; offset < 8; offset++) {
     const candidate = new Date(now);
     candidate.setUTCDate(candidate.getUTCDate() + offset);
-    candidate.setUTCHours(hh, mm, 0, 0);
+    candidate.setUTCHours(utcHH, mm, 0, 0);
 
     if (candidate.getTime() <= now.getTime()) continue;
-    if (days.length > 0 && !days.includes(candidate.getUTCDay())) continue;
+    // Day-of-week check uses MSK day (candidate is already at correct wall-clock moment)
+    const mskDay = new Date(candidate.getTime() + MSK_OFFSET_HOURS * 3600 * 1000).getUTCDay();
+    if (days.length > 0 && !days.includes(mskDay)) continue;
 
     return candidate.getTime() - now.getTime();
   }
 
-  // Fallback: 24h (should never hit with offset < 8)
   return 24 * 60 * 60 * 1000;
 }
 
