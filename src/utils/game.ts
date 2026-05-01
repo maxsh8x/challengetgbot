@@ -32,17 +32,18 @@ export function getAbsDiff(size: number, target: number): number {
   return Math.abs(getDiff(size, target));
 }
 
-export function getSizeEmoji(size: number, target: number): string {
+export function getSizeEmoji(size: number, target: number, range = 25): string {
   const diff = getDiff(size, target);
-  if (diff === 0) return '🏆';
-  if (Math.abs(diff) <= 1) return '🎯';
-  if (diff > (target * 0.6)) return '🚀';
-  if (diff > (target * 0.3)) return '😁';
-  if (diff > 0) return '😏';
-  if (diff < -(target * 0.6)) return '😭';
-  if (diff < -(target * 0.3)) return '😢';
-  if (diff < -(target * 0.15)) return '😞';
-  return '😟';
+  const rel = diff / range; // signed, normalized to theme range
+
+  if (diff === 0)       return pickRandom(['🏆', '👑', '⚡', '🌟', '🎊', '🔥']);
+  if (Math.abs(rel) <= 0.04) return pickRandom(['🎯', '😮', '💨', '🤏', '😲']);
+  if (rel > 0.30)       return pickRandom(['🚀', '😱', '💥', '🛸', '🐘', '🤯']);
+  if (rel > 0.14)       return pickRandom(['😁', '💪', '😈', '🤘', '👀', '🥴']);
+  if (rel > 0)          return pickRandom(['😏', '😎', '🙃', '😌', '🫣', '😼']);
+  if (rel < -0.30)      return pickRandom(['😭', '💔', '☠️', '🫥', '🥶', '😵']);
+  if (rel < -0.14)      return pickRandom(['😢', '😔', '🥺', '😿', '😰', '😓']);
+  return                       pickRandom(['😞', '😬', '🤦', '😟', '🙁', '😒']);
 }
 
 export function getRoast(size: number, target: number, roasts: ThemeRoasts): string {

@@ -13,6 +13,7 @@ export interface Theme {
   id: string;
   name: string;
   emoji: string;
+  displayEmojis?: string[];  // random per-message emoji pool; falls back to emoji
   unit: string;
   minValue: number;
   maxValue: number;
@@ -22,10 +23,17 @@ export interface Theme {
   roasts: ThemeRoasts;
 }
 
+export function getDisplayEmoji(theme: Theme): string {
+  const pool = theme.displayEmojis;
+  if (!pool || pool.length === 0) return theme.emoji;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 const CLASSIC: Theme = {
   id: 'classic',
   name: 'Классика',
   emoji: '🍆',
+  displayEmojis: ['🍆', '🌭', '🥒', '🍌', '🥕', '🎺', '🔧', '🪄', '✏️', '🗡️', '🌵', '🦴', '🚀', '🎸', '🪠'],
   unit: 'см',
   minValue: 3,
   maxValue: 30,
