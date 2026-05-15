@@ -83,7 +83,7 @@ export function formatGameMessage(session: GameSession): string {
 
 // ── Game results ──────────────────────────────────────────────────────────────
 
-export function formatGameResults(session: GameSession): string {
+export function formatGameResults(session: GameSession, protectedUserId?: number): string {
   const theme  = getTheme(session.themeId);
   const { participants, target } = session;
 
@@ -97,9 +97,14 @@ export function formatGameResults(session: GameSession): string {
     ].join('\n');
   }
 
-  // Sort ASC by absDiff: closest to target first (= loser at top), furthest last (= winner at bottom)
-  const sorted = [...participants].sort((a, b) => getAbsDiff(a.size, target) - getAbsDiff(b.size, target));
-  const loser  = sorted[0];
+  // Closest to target = loser; if they were loser last game, their diff is weighted ×1.5
+  const effDiff = (p: Participant) =>
+    getAbsDiff(p.size, target) * (p.userId === protectedUserId ? 1.5 : 1);
+
+  const sorted   = [...participants].sort((a, b) => effDiff(a) - effDiff(b));
+  const loser    = sorted[0];
+  const rawLoser = [...participants].sort((a, b) => getAbsDiff(a.size, target) - getAbsDiff(b.size, target))[0];
+  const shielded = protectedUserId && rawLoser.userId === protectedUserId && loser.userId !== protectedUserId;
 
   const rows = sorted.slice(0, 3).map((p, i) => {
     const diff    = getDiff(p.size, target);
@@ -108,7 +113,6 @@ export function formatGameResults(session: GameSession): string {
     return `${i + 1}. ${mention(p.userId, p.firstName)} — ${escapeHtml(p.funnyName)} <b>${p.size}${theme.unit}</b> (${diffStr}${theme.unit})${badge}`;
   });
 
-  // Jackpot = loser landed exactly on target
   const isJackpot = getAbsDiff(loser.size, target) === 0;
 
   const lines = [
@@ -121,6 +125,10 @@ export function formatGameResults(session: GameSession): string {
     '',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━',
   ];
+
+  if (shielded) {
+    lines.push(`🛡️ <i>${mention(rawLoser.userId, rawLoser.firstName)} спасён — проигрывал прошлый раз!</i>`);
+  }
 
   if (participants.length >= 2) {
     if (isJackpot) {
@@ -136,11 +144,14 @@ export function formatGameResults(session: GameSession): string {
 // Returns podium entries for PNG generation (called by announceResults)
 export function getPodiumEntries(
   session: GameSession,
+  protectedUserId?: number,
 ): Array<{ name: string; value: string }> {
   const theme = getTheme(session.themeId);
   const { participants, target } = session;
   if (participants.length < 2) return [];
-  const sorted = [...participants].sort((a, b) => getAbsDiff(a.size, target) - getAbsDiff(b.size, target));
+  const effDiff = (p: Participant) =>
+    getAbsDiff(p.size, target) * (p.userId === protectedUserId ? 1.5 : 1);
+  const sorted = [...participants].sort((a, b) => effDiff(a) - effDiff(b));
   return sorted.slice(0, 3).map((p) => ({
     name:  p.firstName,
     value: `${p.size}${theme.unit}`,

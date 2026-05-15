@@ -1,6 +1,6 @@
 import { Context, Telegram } from 'telegraf';
 import { storage, GameResult, ChatSchedule } from '../storage';
-import { sessionManager, duelManager, GameSession, Duel } from '../sessions';
+import { sessionManager, duelManager, GameSession, Participant, Duel } from '../sessions';
 import { scheduler } from '../scheduler';
 import {
   formatGameMessage,
@@ -464,29 +464,32 @@ export async function handleUnschedule(ctx: Context): Promise<void> {
 
 // ── Announce results (called on expire / /end / callback end) ─────────────────
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 export async function announceResults(telegram: Telegram, session: GameSession): Promise<void> {
   const theme = getTheme(session.themeId);
   const { participants, target } = session;
 
-  // Furthest from target = winner (safe); closest = loser (makes video)
-  const sorted = [...participants].sort(
-    (a, b) => getAbsDiff(b.size, target) - getAbsDiff(a.size, target),
-  );
-  const winner = sorted[0] ?? null;
-  const loser  = sorted.length >= 2 ? sorted[sorted.length - 1] : null;
+  // Protection: if last game's loser plays again, their diff counts ×1.5
+  const lastGame = storage.getGameHistory(session.chatId, 1)[0];
+  const lastLoserId = lastGame?.loser?.userId;
+  const protectedUserId = participants.length > 1 && lastLoserId ? lastLoserId : undefined;
 
+  const effDiff = (p: Participant) =>
+    getAbsDiff(p.size, target) * (p.userId === protectedUserId ? 1.5 : 1);
+
+  // ASC by effective diff → loser first; DESC → winner first
+  const sortedAsc  = [...participants].sort((a, b) => effDiff(a) - effDiff(b));
+  const sortedDesc = [...participants].sort((a, b) => getAbsDiff(b.size, target) - getAbsDiff(a.size, target));
+
+  const loser  = participants.length >= 2 ? sortedAsc[0]  : null;
+  const winner = sortedDesc[0] ?? null;
+
+  // Save result
   const gameResult: GameResult = {
-    id:               generateId(),
-    chatId:           session.chatId,
-    date:             getToday(),
-    timestamp:        Date.now(),
-    themeId:          session.themeId,
-    themeName:        theme.name,
-    themeEmoji:       theme.emoji,
-    target,
-    unit:             theme.unit,
-    participantCount: participants.length,
-    anonymous:        session.anonymous,
+    id: generateId(), chatId: session.chatId, date: getToday(), timestamp: Date.now(),
+    themeId: session.themeId, themeName: theme.name, themeEmoji: theme.emoji,
+    target, unit: theme.unit, participantCount: participants.length, anonymous: session.anonymous,
     winner: winner ? { userId: winner.userId, firstName: winner.firstName, size: winner.size, diff: getAbsDiff(winner.size, target) } : null,
     loser:  loser  ? { userId: loser.userId,  firstName: loser.firstName,  size: loser.size,  diff: getAbsDiff(loser.size,  target) } : null,
   };
@@ -499,25 +502,34 @@ export async function announceResults(telegram: Telegram, session: GameSession):
       username: p.username, size: p.size, funnyName: p.funnyName,
       date: today, timestamp: p.timestamp,
     });
-  }
-
-  // Update streaks
-  for (const p of participants) {
-    const isWinner = winner?.userId === p.userId;
-    storage.updateStreak(session.chatId, p.userId, isWinner);
+    storage.updateStreak(session.chatId, p.userId, winner?.userId === p.userId);
     storage.incrementChatGames(session.chatId, p.userId);
   }
 
-  const resultsText = formatGameResults(session);
-  const podiumEntries = getPodiumEntries(session);
+  // ── Dramatic reveal ─────────────────────────────────────────────────────────
+  const edit = async (text: string) => {
+    try {
+      await telegram.editMessageText(session.chatId, session.messageId, undefined, text, { parse_mode: 'HTML' });
+    } catch { /* ignore */ }
+  };
 
-  try {
-    await telegram.editMessageText(
-      session.chatId, session.messageId, undefined,
-      '✅ <b>Голосование завершено!</b> Смотри результаты ниже.',
-      { parse_mode: 'HTML' },
+  await edit('🔒 <b>Голосование закрыто!</b>\n\n⏳ Считаю результаты...');
+  await sleep(2000);
+
+  await edit(`🔒 <b>Голосование закрыто!</b>\n\n🎯 Цель была: <b>${target}${theme.unit}</b>\n\n⏳ Определяю лузера...`);
+  await sleep(2000);
+
+  if (loser) {
+    await edit(
+      `🔒 <b>Голосование закрыто!</b>\n\n🎯 Цель: <b>${target}${theme.unit}</b>\n\n` +
+      `💀 Лузер: ${mention(loser.userId, loser.firstName)}\n\n<i>Готовь видос... 🎬</i>`,
     );
-  } catch { /* message may be too old */ }
+    await sleep(1500);
+  }
+
+  // ── Full results ─────────────────────────────────────────────────────────────
+  const resultsText   = formatGameResults(session, protectedUserId);
+  const podiumEntries = getPodiumEntries(session, protectedUserId);
 
   if (podiumEntries.length >= 2) {
     const img = generatePodiumImage(podiumEntries);
