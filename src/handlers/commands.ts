@@ -5,6 +5,7 @@ import { scheduler } from '../scheduler';
 import {
   formatGameMessage,
   formatGameResults,
+  getPodiumEntries,
   formatHistory,
   formatChampions,
   formatStats,
@@ -13,11 +14,10 @@ import {
   formatCompare,
   formatDuelChallenge,
   formatDuelResult,
-  formatNewAchievements,
-  formatAchievementsList,
   escapeHtml,
   mention,
 } from '../utils/messages';
+import { generatePodiumImage } from '../utils/ascii';
 import {
   getRandomTarget,
   getRandomSize,
@@ -30,7 +30,6 @@ import {
 } from '../utils/game';
 import { THEME_LIST, getTheme } from '../themes';
 import { DEFAULT_DURATION_MINUTES, MIN_DURATION_MINUTES, MAX_DURATION_MINUTES } from '../constants';
-import { checkAchievements, ACHIEVEMENT_LIST } from '../achievements';
 
 export async function handleStart(ctx: Context): Promise<void> {
   const name = ctx.from?.first_name ?? 'друг';
@@ -314,20 +313,13 @@ export async function handleTop(ctx: Context): Promise<void> {
 
 export async function handleStats(ctx: Context): Promise<void> {
   if (!ctx.from) return;
-  const stats    = storage.getUserStats(ctx.from.id);
-  const streak   = storage.getStreak(ctx.chat?.id ?? 0, ctx.from.id);
-  const achIds   = storage.getUserAchievements(ctx.from.id);
+  const name   = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
+  const stats  = storage.getUserStats(ctx.from.id);
+  const streak = storage.getStreak(ctx.chat?.id ?? 0, ctx.from.id);
   await ctx.reply(
-    formatStats(ctx.from.id, ctx.from.first_name, stats, streak, achIds.length),
+    formatStats(ctx.from.id, name, stats, streak),
     { parse_mode: 'HTML' },
   );
-}
-
-export async function handleAchievements(ctx: Context): Promise<void> {
-  if (!ctx.from) return;
-  const ids  = storage.getUserAchievements(ctx.from.id);
-  const list = ACHIEVEMENT_LIST.filter((a) => ids.includes(a.id));
-  await ctx.reply(formatAchievementsList(ctx.from.first_name, list), { parse_mode: 'HTML' });
 }
 
 export async function handleCompare(ctx: Context): Promise<void> {
@@ -403,7 +395,7 @@ export async function handleDuel(ctx: Context): Promise<void> {
     chatId: ctx.chat.id,
     messageId: 0,
     challengerId:   ctx.from.id,
-    challengerName: ctx.from.first_name,
+    challengerName: [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' '),
     challengedId:   challengedUserId,
     challengedName: match[1],
     themeId: 'classic',
@@ -533,31 +525,15 @@ export async function announceResults(telegram: Telegram, session: GameSession):
     });
   }
 
-  // Streaks + achievements
-  const achievementMsgs: string[] = [];
+  // Update streaks
   for (const p of participants) {
     const isWinner = winner?.userId === p.userId;
-    const isLoser  = loser?.userId  === p.userId;
-    const streak   = storage.updateStreak(session.chatId, p.userId, isWinner);
-    const games    = storage.incrementChatGames(session.chatId, p.userId);
-    const diff     = getAbsDiff(p.size, target);
-    const alreadyHas = (id: string) => storage.getUserAchievements(p.userId).includes(id);
-
-    const earned = checkAchievements({
-      userId: p.userId, chatId: session.chatId,
-      isWinner, isLoser, diff,
-      winStreak:  streak.wins,
-      lossStreak: streak.losses,
-      chatGames:  games,
-      isJackpot:  diff === 0,
-      anonymous:  session.anonymous,
-    }, alreadyHas);
-
-    for (const a of earned) storage.grantAchievement(p.userId, a.id);
-    if (earned.length > 0) achievementMsgs.push(formatNewAchievements(p.userId, p.firstName, earned));
+    storage.updateStreak(session.chatId, p.userId, isWinner);
+    storage.incrementChatGames(session.chatId, p.userId);
   }
 
   const resultsText = formatGameResults(session);
+  const podiumEntries = getPodiumEntries(session);
 
   try {
     await telegram.editMessageText(
@@ -569,8 +545,9 @@ export async function announceResults(telegram: Telegram, session: GameSession):
 
   await telegram.sendMessage(session.chatId, resultsText, { parse_mode: 'HTML' });
 
-  for (const msg of achievementMsgs) {
-    await telegram.sendMessage(session.chatId, msg, { parse_mode: 'HTML' });
+  if (podiumEntries.length >= 2) {
+    const img = generatePodiumImage(podiumEntries);
+    await telegram.sendPhoto(session.chatId, { source: img });
   }
 }
 

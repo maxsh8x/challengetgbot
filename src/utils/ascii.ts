@@ -1,3 +1,4 @@
+import { createCanvas, CanvasRenderingContext2D } from 'canvas';
 import { getDiff } from './game';
 import { Theme } from '../themes';
 
@@ -33,6 +34,112 @@ export function generateMeter(size: number, target: number, theme: Theme): strin
   const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
   const arrow   = diff > 0 ? '→' : diff < 0 ? '←' : '✓';
   return `📏 ${size}${theme.unit} ${arrow} цель ${target}${theme.unit} (${diffStr}${theme.unit})`;
+}
+
+// ── PNG Podium ────────────────────────────────────────────────────────────────
+
+export function generatePodiumImage(
+  entries: Array<{ name: string; value: string }>,
+): Buffer {
+  const W = 580, H = 400;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  // Background gradient
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#0f0c29');
+  bg.addColorStop(1, '#302b63');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 26px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('ПОДИУМ ЛУЗЕРОВ', W / 2, 48);
+
+  // Title underline
+  ctx.strokeStyle = '#e74c3c';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - 130, 60);
+  ctx.lineTo(W / 2 + 130, 60);
+  ctx.stroke();
+
+  const [first, second, third] = entries;
+  const baseY = 345;
+  const colW  = 150;
+
+  // Layout: left=2nd, center=1st(loser), right=3rd
+  const cols = [
+    { entry: second, cx: W / 2 - colW - 15, blockH: 155, color: '#7f8c8d', rank: '#2' },
+    { entry: first,  cx: W / 2,              blockH: 235, color: '#e74c3c', rank: '#1' },
+    { entry: third,  cx: W / 2 + colW + 15,  blockH: 75,  color: '#d4845a', rank: '#3' },
+  ];
+
+  for (const { entry, cx, blockH, color, rank } of cols) {
+    const bx = cx - colW / 2;
+    const by = baseY - blockH;
+
+    // Block body
+    roundRect(ctx, bx, by, colW, blockH, 8);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Top highlight
+    const hi = ctx.createLinearGradient(bx, by, bx, by + blockH);
+    hi.addColorStop(0, 'rgba(255,255,255,0.18)');
+    hi.addColorStop(0.5, 'rgba(255,255,255,0)');
+    roundRect(ctx, bx, by, colW, blockH, 8);
+    ctx.fillStyle = hi;
+    ctx.fill();
+
+    // Rank number inside block
+    ctx.fillStyle = 'rgba(255,255,255,0.30)';
+    ctx.font = `bold 52px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(rank, cx, baseY - blockH / 2 + 18);
+
+    // Name above block (truncate long names)
+    const name = (entry?.name ?? '').slice(0, 14);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 17px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(name, cx, by - 12);
+
+    // Value below base
+    ctx.fillStyle = '#aaaaaa';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(entry?.value ?? '', cx, baseY + 26);
+  }
+
+  // Base platform
+  const plat = ctx.createLinearGradient(0, baseY, 0, baseY + 8);
+  plat.addColorStop(0, '#555');
+  plat.addColorStop(1, '#333');
+  roundRect(ctx, 30, baseY, W - 60, 8, 4);
+  ctx.fillStyle = plat;
+  ctx.fill();
+
+  return canvas.toBuffer('image/png');
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 export function generatePodium(

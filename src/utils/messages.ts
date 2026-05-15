@@ -2,10 +2,9 @@ import { GameSession, Participant, Duel } from '../sessions';
 import { GameResult } from '../storage';
 import { TITLES } from '../constants';
 import { Theme, getTheme, getDisplayEmoji } from '../themes';
-import { Achievement } from '../achievements';
 import { getDiff, getAbsDiff, getSizeEmoji, getRoast, formatDate, formatTimeLeft } from './game';
 import { formatDays } from './game';
-import { generateDick, generateJackpotBanner, generateSizeBar, generateMeter, generatePodium } from './ascii';
+import { generateDick, generateJackpotBanner, generateSizeBar, generateMeter } from './ascii';
 
 export function escapeHtml(t: string): string {
   return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -49,7 +48,9 @@ export function formatJoinMessage(p: Participant, target: number, theme: Theme, 
 export function formatGameMessage(session: GameSession): string {
   const theme      = getTheme(session.themeId);
   const timeLeft   = session.deadline - Date.now();
-  const deadlineStr = new Date(session.deadline).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const mskMs      = session.deadline + 3 * 3600 * 1000;
+  const mskDate    = new Date(mskMs);
+  const deadlineStr = `${String(mskDate.getUTCHours()).padStart(2, '0')}:${String(mskDate.getUTCMinutes()).padStart(2, '0')} МСК`;
   const anonBadge  = session.anonymous ? ' 🕵️ <i>анонимный</i>' : '';
 
   const lines = [
@@ -110,14 +111,6 @@ export function formatGameResults(session: GameSession): string {
   // Jackpot = loser landed exactly on target
   const isJackpot = getAbsDiff(loser.size, target) === 0;
 
-  // Podium of losers: top 3 closest to target (ASC sort = sorted[0..2])
-  const loserMedals = ['💀', '🥈', '🥉'];
-  const podiumEntries = sorted.slice(0, 3).map((p, i) => ({
-    name:  p.firstName.slice(0, 7),
-    value: `${p.size}${theme.unit}`,
-    medal: loserMedals[i] ?? '',
-  }));
-
   const lines = [
     `🏁 <b>ГОЛОСОВАНИЕ ЗАВЕРШЕНО: ${theme.name} ${theme.emoji}</b>`,
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━',
@@ -126,13 +119,8 @@ export function formatGameResults(session: GameSession): string {
     '',
     ...rows,
     '',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━',
   ];
-
-  if (sorted.length >= 2) {
-    lines.push(`<pre>${generatePodium(podiumEntries)}</pre>`, '');
-  }
-
-  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   if (participants.length >= 2) {
     if (isJackpot) {
@@ -145,6 +133,20 @@ export function formatGameResults(session: GameSession): string {
   return lines.join('\n');
 }
 
+// Returns podium entries for PNG generation (called by announceResults)
+export function getPodiumEntries(
+  session: GameSession,
+): Array<{ name: string; value: string }> {
+  const theme = getTheme(session.themeId);
+  const { participants, target } = session;
+  if (participants.length < 2) return [];
+  const sorted = [...participants].sort((a, b) => getAbsDiff(a.size, target) - getAbsDiff(b.size, target));
+  return sorted.slice(0, 3).map((p) => ({
+    name:  p.firstName,
+    value: `${p.size}${theme.unit}`,
+  }));
+}
+
 // ── Reminder ──────────────────────────────────────────────────────────────────
 
 export function formatReminder(session: GameSession): string {
@@ -155,23 +157,6 @@ export function formatReminder(session: GameSession): string {
     `👥 Уже участвуют: ${session.participants.length} чел.`,
     'Кто ещё не замерился — последний шанс! 🔥',
   ].join('\n');
-}
-
-// ── Achievements ──────────────────────────────────────────────────────────────
-
-export function formatNewAchievements(userId: number, firstName: string, achievements: Achievement[]): string {
-  if (achievements.length === 0) return '';
-  const list = achievements.map((a) => `${a.emoji} <b>${a.name}</b> — ${a.description}`).join('\n');
-  return [`🎖 <b>${mention(userId, firstName)}</b> получает достижения:`, list].join('\n');
-}
-
-export function formatAchievementsList(firstName: string, achievements: Achievement[]): string {
-  if (achievements.length === 0) {
-    return [`🎖 <b>Достижения: ${escapeHtml(firstName)}</b>`, '', 'Пока пусто. Играй чаще!'].join('\n');
-  }
-  const lines = [`🎖 <b>Достижения: ${escapeHtml(firstName)}</b> (${achievements.length})`, ''];
-  for (const a of achievements) lines.push(`${a.emoji} <b>${a.name}</b>\n   <i>${a.description}</i>`);
-  return lines.join('\n');
 }
 
 // ── Duel ──────────────────────────────────────────────────────────────────────
@@ -274,7 +259,6 @@ export function formatStats(
   firstName: string,
   stats: { totalPlays: number; wins: number; bestDiff: number | null },
   streak: { wins: number; losses: number },
-  achievementCount: number,
 ): string {
   const title   = getTitle(stats.wins);
   const winRate = stats.totalPlays > 0 ? Math.round((stats.wins / stats.totalPlays) * 100) : 0;
@@ -287,7 +271,6 @@ export function formatStats(
   return [
     `📈 <b>Статистика: ${mention(userId, firstName)}</b>`,
     `🎖 Звание: ${title}`,
-    `🏅 Достижений: <b>${achievementCount}</b>`,
     '━━━━━━━━━━━━━━━━━━',
     `🎲 Всего игр: <b>${stats.totalPlays}</b>`,
     `🏆 Побед: <b>${stats.wins}</b>`,

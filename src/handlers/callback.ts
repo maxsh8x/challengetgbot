@@ -60,7 +60,7 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
 
     const participant = {
       userId:    ctx.from.id,
-      firstName: ctx.from.first_name,
+      firstName: displayName,
       username:  ctx.from.username ?? '',
       size,
       funnyName,

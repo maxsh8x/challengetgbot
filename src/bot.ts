@@ -11,7 +11,6 @@ import {
   handleChampions,
   handleTop,
   handleStats,
-  handleAchievements,
   handleCompare,
   handleDuel,
   handleSchedule,
@@ -19,6 +18,7 @@ import {
   announceResults,
   startGameSession,
 } from './handlers/commands';
+import { formatGameMessage } from './utils/messages';
 import { sessionManager } from './sessions';
 import { scheduler } from './scheduler';
 
@@ -29,6 +29,23 @@ export const bot = new Telegraf(token);
 
 sessionManager.setCallbacks({
   onExpire: async (session) => { await announceResults(bot.telegram, session); },
+  onUpdate: async (session) => {
+    try {
+      await bot.telegram.editMessageText(
+        session.chatId, session.messageId, undefined,
+        formatGameMessage(session),
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🎲 Участвовать!', callback_data: `join:${session.id}` }],
+              [{ text: '🏁 Завершить',    callback_data: `end:${session.id}`  }],
+            ],
+          },
+        },
+      );
+    } catch { /* ignore rate limit / too old */ }
+  },
 });
 
 scheduler.init(bot.telegram, startGameSession);
@@ -42,7 +59,6 @@ bot.command('history',      handleHistory);
 bot.command('champions',    handleChampions);
 bot.command('top',          handleTop);
 bot.command('stats',        handleStats);
-bot.command('achievements', handleAchievements);
 bot.command('compare',      handleCompare);
 bot.command('duel',         handleDuel);
 bot.command('schedule',     handleSchedule);

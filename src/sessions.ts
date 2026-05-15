@@ -92,13 +92,13 @@ class SessionManager {
       this.reminders.set(session.id, rt);
     }
 
-    // Live update every 5 min
+    // Live update every 10 seconds
     if (this.onUpdate) {
       const iv = setInterval(() => {
         const s = this.sessions.get(session.id);
         if (!s || s.status !== 'active') { clearInterval(iv); return; }
         void this.onUpdate?.(s);
-      }, 5 * 60 * 1000) as unknown as NodeJS.Timeout;
+      }, 10 * 1000) as unknown as NodeJS.Timeout;
       this.intervals.set(session.id, iv);
     }
   }
