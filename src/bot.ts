@@ -11,7 +11,6 @@ import {
   handleChampions,
   handleTop,
   handleStats,
-  handleCompare,
   handleDuel,
   handleSchedule,
   handleUnschedule,
@@ -59,7 +58,6 @@ bot.command('history',      handleHistory);
 bot.command('champions',    handleChampions);
 bot.command('top',          handleTop);
 bot.command('stats',        handleStats);
-bot.command('compare',      handleCompare);
 bot.command('duel',         handleDuel);
 bot.command('schedule',     handleSchedule);
 bot.command('unschedule',   handleUnschedule);

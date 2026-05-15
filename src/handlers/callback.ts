@@ -54,7 +54,8 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     }
 
     const theme       = getTheme(session.themeId);
-    const size        = getRandomSize(theme);
+    const taken       = session.participants.map((p) => p.size);
+    const size        = getRandomSize(theme, taken);
     const funnyName   = getRandomName(theme);
     const displayName = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
 

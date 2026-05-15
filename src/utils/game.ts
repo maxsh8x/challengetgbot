@@ -1,21 +1,23 @@
 import { Theme, ThemeRoasts } from '../themes';
 
+const r1 = (n: number) => Math.round(n * 10) / 10;
+
 export function getRandomTarget(theme: Theme): number {
-  return (
-    Math.floor(Math.random() * (theme.targetMax - theme.targetMin + 1)) + theme.targetMin
-  );
+  return r1(Math.random() * (theme.targetMax - theme.targetMin) + theme.targetMin);
 }
 
-export function getRandomSize(theme: Theme): number {
-  let size: number;
-  const mid = (theme.targetMin + theme.targetMax) / 2;
+export function getRandomSize(theme: Theme, taken: number[] = []): number {
+  const mid    = (theme.targetMin + theme.targetMax) / 2;
   const spread = (theme.maxValue - theme.minValue) / 4;
+  let size: number;
+  let attempts = 0;
   do {
     const u1 = Math.random();
     const u2 = Math.random();
-    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    size = Math.round(mid + spread * z);
-  } while (size < theme.minValue || size > theme.maxValue);
+    const z  = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    size = r1(mid + spread * z);
+    if (++attempts > 100) break; // give up on uniqueness to avoid infinite loop
+  } while (size < theme.minValue || size > theme.maxValue || taken.includes(size));
   return size;
 }
 
@@ -25,7 +27,7 @@ export function getRandomName(theme: Theme): string {
 }
 
 export function getDiff(size: number, target: number): number {
-  return size - target;
+  return r1(size - target);
 }
 
 export function getAbsDiff(size: number, target: number): number {

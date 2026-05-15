@@ -101,13 +101,6 @@ const COMMAND_HELP: Record<string, string> = {
     'Пользователь должен был хотя бы раз поиграть в чате.',
   ].join('\n'),
 
-  compare: [
-    '⚖️ <b>/compare @username</b> — сравнить статистику',
-    '',
-    'Показывает таблицу: победы, поражения, игры и стрики двух игроков.',
-    'Пользователь должен был хотя бы раз поиграть в чате.',
-  ].join('\n'),
-
   history: [
     '📜 <b>/history</b> — история голосований',
     '',
@@ -165,7 +158,6 @@ export async function handleHelp(ctx: Context): Promise<void> {
     '/top — зал славы чата',
     '/history — история голосований',
     '/stats — твоя статистика',
-    '/compare @user — сравнение с игроком',
     '',
     '<b>Дополнительно</b>',
     '/duel @user — вызов на дуэль',
@@ -602,13 +594,13 @@ export async function resolveDuel(telegram: Telegram, duel: Duel): Promise<void>
   const theme = getTheme(duel.themeId);
   const target = getRandomTarget(theme);
 
-  const makeParticipant = (userId: number, name: string) => ({
-    userId, firstName: name, username: '', size: getRandomSize(theme),
+  const make = (userId: number, name: string, taken: number[] = []) => ({
+    userId, firstName: name, username: '', size: getRandomSize(theme, taken),
     funnyName: getRandomName(theme), timestamp: Date.now(),
   });
 
-  const p1 = makeParticipant(duel.challengerId,  duel.challengerName);
-  const p2 = makeParticipant(duel.challengedId,  duel.challengedName);
+  const p1 = make(duel.challengerId, duel.challengerName);
+  const p2 = make(duel.challengedId, duel.challengedName, [p1.size]);
 
   // Furthest from target = winner (safe); closest = loser (makes video)
   const winner = getAbsDiff(p1.size, target) >= getAbsDiff(p2.size, target) ? p1 : p2;
