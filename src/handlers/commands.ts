@@ -543,11 +543,11 @@ export async function announceResults(telegram: Telegram, session: GameSession):
     );
   } catch { /* message may be too old */ }
 
-  await telegram.sendMessage(session.chatId, resultsText, { parse_mode: 'HTML' });
-
   if (podiumEntries.length >= 2) {
     const img = generatePodiumImage(podiumEntries);
-    await telegram.sendPhoto(session.chatId, { source: img });
+    await telegram.sendPhoto(session.chatId, { source: img }, { caption: resultsText, parse_mode: 'HTML' });
+  } else {
+    await telegram.sendMessage(session.chatId, resultsText, { parse_mode: 'HTML' });
   }
 }
 
