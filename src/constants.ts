@@ -1,4 +1,4 @@
-export const DEFAULT_DURATION_MINUTES = 30;
+export const DEFAULT_DURATION_MINUTES = 60;
 export const MIN_DURATION_MINUTES = 2;
 export const MAX_DURATION_MINUTES = 120;
 
